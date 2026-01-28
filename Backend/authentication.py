@@ -1,8 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 import hashlib
 import mysql.connector
 
 app = Flask(__name__)
+app.secret_key = "2aKX2wJ5m7GDecb9m"
 
 def get_db_connection():
     return mysql.connector.connect(
@@ -38,6 +39,9 @@ def login():
         return jsonify({"error": "User not found"}), 404
 
     if user['password'] == password_hash:
+        session['user_id'] = user['uuid']
+        session['username'] = username
+        session['authenticated'] = True
         return jsonify({
             "status": "Login successful"
         })
