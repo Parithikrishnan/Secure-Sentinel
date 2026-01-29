@@ -22,18 +22,7 @@ function Signup() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Handle token from Google OAuth redirect
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    if (token) {
-      localStorage.setItem('token', token);
-      setMessage('Google signup successful!');
-      setTimeout(() => {
-        navigate('/profileform');
-      }, 2000);
-    }
-  }, [navigate]);
+
 
   const handleChange = e => {
     setForm({ ...form, [e.target.name]: e.target.value });

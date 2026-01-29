@@ -10,7 +10,7 @@ import LoginPage from './pages/loginpage';
 import SignupPage from './pages/signup';
 import Scheme from './pages/scheme';
 import Eligibility from './pages/eligibility';
-import AccessibilityDialog from './pages/accessibility';
+//import AccessibilityDialog from './pages/accessibility';
 import Chatbot from './components/Chatbot';
 
 function App() {
@@ -43,8 +43,8 @@ function App() {
         </Routes>
       </div>
 
-      {/* Accessibility Dialog - exclude landing */}
-      {!isLandingPage && <AccessibilityDialog />}
+      {/* Accessibility Dialog - exclude landing 
+      {!isLandingPage && <AccessibilityDialog />}*/}
 
       {/* Chatbot - exclude landing */}
       {!isLandingPage && <Chatbot />}
