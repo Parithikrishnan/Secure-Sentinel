@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Lottie from 'lottie-react';
 import Login from '../assets/login.json';
 import axios from 'axios';
+import Dashboard from './dashboard';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
@@ -244,7 +245,7 @@ const LoginPage = () => {
           {/* Links */}
           <div className="mt-6 space-y-3 text-center">
             <Link
-              to="/forgot-password"
+              to="/dashboard"
               className="block text-cyan-400 hover:text-cyan-300 font-medium transition-colors duration-300 hover:underline"
             >
               Forgot Password?
