@@ -202,12 +202,6 @@ const Landing = () => {
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
                   </div>
                 </Link>
-                <Link to="/security" className="group relative px-8 py-4 bg-slate-800/50 border-2 border-cyan-500/50 text-cyan-400 font-bold rounded-full hover:bg-cyan-500/10 hover:border-cyan-400 transform hover:-translate-y-1 transition-all duration-300 backdrop-blur-sm">
-                  <span className="relative z-10 flex items-center space-x-2">
-                    <Eye className="w-5 h-5" />
-                    <span>Learn More</span>
-                  </span>
-                </Link>
               </div>
 
               {/* Stats */}
