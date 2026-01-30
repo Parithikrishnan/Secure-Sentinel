@@ -58,22 +58,6 @@ const SecurityDashboard = () => {
   const [geolocationLogs, setGeolocationLogs] = useState([]);
   const [siteStatus, setSiteStatus] = useState({});
   
-  // Live Network Statistics
-  const [liveNetworkStats, setLiveNetworkStats] = useState({
-    total_requests: 0,
-    active_connections: 0,
-    data_transferred: 0,
-    blocked_requests: 0
-  });
-  
-  // Browser Permissions State
-  const [browserPermissions, setBrowserPermissions] = useState({
-    geolocation: 'unknown',
-    camera: 'unknown',
-    microphone: 'unknown',
-    notifications: 'unknown'
-  });
-  
   // UI States
   const [activeTab, setActiveTab] = useState('overview');
   const [showNetworkMonitor, setShowNetworkMonitor] = useState(false);
@@ -122,15 +106,7 @@ const SecurityDashboard = () => {
       });
       
       socketRef.current.on('network_update', (data) => {
-        // Update logs
-        if (data.logs) {
-          setNetworkLogs(prev => [...data.logs, ...prev].slice(0, 100));
-        }
-        
-        // Update live stats
-        if (data.stats) {
-          setLiveNetworkStats(data.stats);
-        }
+        setNetworkLogs(prev => [...data.logs, ...prev].slice(0, 100));
       });
       
       socketRef.current.on('permission_alert', (alert) => {
@@ -144,57 +120,7 @@ const SecurityDashboard = () => {
   }, [vaultUnlocked]);
 
   // ==========================================
-  // BROWSER PERMISSION MONITORING
-  // ==========================================
-  useEffect(() => {
-    if (vaultUnlocked && navigator.permissions) {
-      const checkPermissions = async () => {
-        const permissions = ['geolocation', 'camera', 'microphone', 'notifications'];
-        
-        for (const perm of permissions) {
-          try {
-            const result = await navigator.permissions.query({ name: perm });
-            
-            // Update local state
-            setBrowserPermissions(prev => ({
-              ...prev,
-              [perm]: result.state
-            }));
-            
-            // Send to backend
-            await fetch(`${API_URL}/permissions/browser`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: perm, state: result.state })
-            });
-            
-            // Listen for permission changes
-            result.addEventListener('change', async () => {
-              setBrowserPermissions(prev => ({
-                ...prev,
-                [perm]: result.state
-              }));
-              
-              // Notify backend of change
-              await fetch(`${API_URL}/permissions/browser`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: perm, state: result.state })
-              });
-            });
-          } catch (error) {
-            console.log(`${perm} permission not supported or error:`, error);
-          }
-        }
-      };
-      
-      checkPermissions();
-      
-      // Re-check permissions every 10 seconds
-      const interval = setInterval(checkPermissions, 10000);
-      return () => clearInterval(interval);
-    }
-  }, [vaultUnlocked]);
+  // FETCH INSTALLED APPLICATIONS (ARCH LINUX)
   // ==========================================
   const fetchInstalledApps = async () => {
     try {
@@ -814,7 +740,7 @@ const SecurityDashboard = () => {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-slate-400 text-sm">Total Requests</p>
-                          <p className="text-2xl font-bold text-white mt-1">{liveNetworkStats.total_requests}</p>
+                          <p className="text-2xl font-bold text-white mt-1">{networkLogs.length}</p>
                         </div>
                         <Activity className="w-8 h-8 text-cyan-400" />
                       </div>
@@ -823,7 +749,7 @@ const SecurityDashboard = () => {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-slate-400 text-sm">Active Connections</p>
-                          <p className="text-2xl font-bold text-white mt-1">{liveNetworkStats.active_connections}</p>
+                          <p className="text-2xl font-bold text-white mt-1">12</p>
                         </div>
                         <Wifi className="w-8 h-8 text-green-400" />
                       </div>
@@ -832,7 +758,7 @@ const SecurityDashboard = () => {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-slate-400 text-sm">Data Transferred</p>
-                          <p className="text-2xl font-bold text-white mt-1">{(liveNetworkStats.data_transferred / 1024 / 1024).toFixed(2)} MB</p>
+                          <p className="text-2xl font-bold text-white mt-1">2.4 MB</p>
                         </div>
                         <Database className="w-8 h-8 text-purple-400" />
                       </div>
@@ -841,7 +767,7 @@ const SecurityDashboard = () => {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-slate-400 text-sm">Blocked Requests</p>
-                          <p className="text-2xl font-bold text-white mt-1">{liveNetworkStats.blocked_requests}</p>
+                          <p className="text-2xl font-bold text-white mt-1">3</p>
                         </div>
                         <Shield className="w-8 h-8 text-red-400" />
                       </div>
@@ -866,52 +792,16 @@ const SecurityDashboard = () => {
                         {networkLogs.map((log, index) => (
                           <div key={index} className="bg-slate-800/30 border border-slate-700/30 rounded-lg p-4 hover:border-cyan-500/30 transition-all duration-200">
                             <div className="flex items-start justify-between mb-2">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-xs text-slate-500 font-mono">
-                                  {new Date(log.timestamp).toLocaleTimeString()}
-                                </span>
-                                {log.domain && (
-                                  <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded font-mono">
-                                    {log.domain}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                {log.blocked && (
-                                  <span className="text-xs px-2 py-1 bg-red-500/20 text-red-400 rounded">
-                                    BLOCKED
-                                  </span>
-                                )}
-                                <span className={`text-xs px-2 py-1 rounded ${
-                                  log.type === 'request' 
-                                    ? 'bg-cyan-500/20 text-cyan-400' 
-                                    : 'bg-green-500/20 text-green-400'
-                                }`}>
-                                  {log.type === 'request' ? '📤 REQUEST' : '📥 RESPONSE'}
-                                </span>
-                              </div>
+                              <span className="text-xs text-slate-500 font-mono">
+                                {new Date(log.timestamp).toLocaleTimeString()}
+                              </span>
+                              <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded">
+                                Network
+                              </span>
                             </div>
-                            
-                            {log.method && (
-                              <p className="text-sm text-slate-300 mb-1">
-                                <span className="text-cyan-400 font-semibold">{log.method}</span> {log.path}
-                              </p>
-                            )}
-                            
-                            {log.status && (
-                              <p className="text-sm text-slate-300 mb-1">
-                                Status: <span className={`font-semibold ${
-                                  log.status < 300 ? 'text-green-400' : 
-                                  log.status < 400 ? 'text-yellow-400' : 'text-red-400'
-                                }`}>{log.status}</span>
-                              </p>
-                            )}
-                            
-                            {log.size && (
-                              <p className="text-xs text-slate-500">
-                                Size: {(log.size / 1024).toFixed(2)} KB
-                              </p>
-                            )}
+                            <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap break-words">
+                              {log.content}
+                            </pre>
                           </div>
                         ))}
                       </div>
@@ -941,17 +831,10 @@ const SecurityDashboard = () => {
                             </div>
                             <div>
                               <p className="text-white font-semibold">Camera</p>
-                              <p className="text-slate-400 text-xs">
-                                {browserPermissions.camera === 'granted' ? 'Granted' : 
-                                 browserPermissions.camera === 'denied' ? 'Denied' : 
-                                 browserPermissions.camera === 'prompt' ? 'Prompt' : 'Unknown'}
-                              </p>
+                              <p className="text-slate-400 text-xs">Video Devices</p>
                             </div>
                           </div>
-                          <div className={`w-3 h-3 rounded-full ${
-                            browserPermissions.camera === 'granted' ? 'bg-green-400 animate-pulse' : 
-                            browserPermissions.camera === 'denied' ? 'bg-red-400' : 'bg-slate-600'
-                          }`} />
+                          <div className={`w-3 h-3 rounded-full ${cameraLogs.length > 0 ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
                         </div>
                         <div className="space-y-2">
                           {cameraLogs.length === 0 ? (
@@ -976,17 +859,10 @@ const SecurityDashboard = () => {
                             </div>
                             <div>
                               <p className="text-white font-semibold">Microphone</p>
-                              <p className="text-slate-400 text-xs">
-                                {browserPermissions.microphone === 'granted' ? 'Granted' : 
-                                 browserPermissions.microphone === 'denied' ? 'Denied' : 
-                                 browserPermissions.microphone === 'prompt' ? 'Prompt' : 'Unknown'}
-                              </p>
+                              <p className="text-slate-400 text-xs">Audio Input</p>
                             </div>
                           </div>
-                          <div className={`w-3 h-3 rounded-full ${
-                            browserPermissions.microphone === 'granted' ? 'bg-red-400 animate-pulse' : 
-                            browserPermissions.microphone === 'denied' ? 'bg-red-400' : 'bg-slate-600'
-                          }`} />
+                          <div className={`w-3 h-3 rounded-full ${microphoneLogs.length > 0 ? 'bg-red-400 animate-pulse' : 'bg-slate-600'}`} />
                         </div>
                         <div className="space-y-2">
                           {microphoneLogs.length === 0 ? (
@@ -1011,17 +887,10 @@ const SecurityDashboard = () => {
                             </div>
                             <div>
                               <p className="text-white font-semibold">Geolocation</p>
-                              <p className="text-slate-400 text-xs">
-                                {browserPermissions.geolocation === 'granted' ? 'Granted' : 
-                                 browserPermissions.geolocation === 'denied' ? 'Denied' : 
-                                 browserPermissions.geolocation === 'prompt' ? 'Prompt' : 'Unknown'}
-                              </p>
+                              <p className="text-slate-400 text-xs">GPS Access</p>
                             </div>
                           </div>
-                          <div className={`w-3 h-3 rounded-full ${
-                            browserPermissions.geolocation === 'granted' ? 'bg-green-400 animate-pulse' : 
-                            browserPermissions.geolocation === 'denied' ? 'bg-red-400' : 'bg-slate-600'
-                          }`} />
+                          <div className={`w-3 h-3 rounded-full ${geolocationLogs.length > 0 ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
                         </div>
                         <div className="space-y-2">
                           {geolocationLogs.length === 0 ? (

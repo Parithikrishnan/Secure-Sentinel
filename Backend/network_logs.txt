@@ -7446,3 +7446,45 @@ Body: b'success\n'
 📊 Size: 260 bytes
 ⏱️ Duration: 87ms
 ===
+[2026-01-30T11:51:14.335293]
+🌐 Domain: detectportal.firefox.com
+📤 Request: GET /canonical.html
+📊 Size: 332 bytes
+✅ Allowed
+---
+[2026-01-30T11:51:19.336348]
+🌐 Domain: detectportal.firefox.com
+📤 Request: GET /canonical.html
+📊 Size: 332 bytes
+✅ Allowed
+---
+[2026-01-30T11:51:19.692397]
+🌐 Domain: detectportal.firefox.com
+📥 Response: 200
+📊 Size: 342 bytes
+⏱️ Duration: 356ms
+===
+[2026-01-30T11:51:19.710707]
+🌐 Domain: detectportal.firefox.com
+📤 Request: GET /success.txt?ipv4
+📊 Size: 355 bytes
+✅ Allowed
+---
+[2026-01-30T11:51:19.715301]
+🌐 Domain: detectportal.firefox.com
+📤 Request: GET /success.txt?ipv6
+📊 Size: 355 bytes
+✅ Allowed
+---
+[2026-01-30T11:51:20.046855]
+🌐 Domain: detectportal.firefox.com
+📥 Response: 200
+📊 Size: 260 bytes
+⏱️ Duration: 338ms
+===
+[2026-01-30T11:51:20.050133]
+🌐 Domain: detectportal.firefox.com
+📥 Response: 200
+📊 Size: 260 bytes
+⏱️ Duration: 336ms
+===
