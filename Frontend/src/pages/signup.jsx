@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Lottie from 'lottie-react';
-import SignupAnimation from '../assets/login.json';
+import SignupAnimation from '../assets/login.json'; // ← rename file to signup.json later if you want
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Phone, Lock, Eye, EyeOff, Shield, Sparkles, UserPlus } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, Shield, Sparkles, UserPlus, CheckCircle, X } from 'lucide-react';
 
 function Signup() {
-  const [form, setForm] = useState({ name: '', password: '' });
+  const [form, setForm] = useState({
+    username: '',
+    password: '',
+    confirmPassword: '',
+  });
   const [message, setMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [passwordMatch, setPasswordMatch] = useState(true);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const navigate = useNavigate();
 
@@ -22,35 +28,65 @@ function Signup() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  // Real-time password match check
+  useEffect(() => {
+    if (form.confirmPassword.length > 0) {
+      setPasswordMatch(form.password === form.confirmPassword);
+    } else {
+      setPasswordMatch(true); // hide indicator when confirm is empty
+    }
+  }, [form.password, form.confirmPassword]);
 
-
-  const handleChange = e => {
+  const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setMessage('');
   };
 
-  const handleSubmit = async e => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (form.password !== form.confirmPassword) {
+      setMessage('Passwords do not match!');
+      return;
+    }
+
+    if (form.password.length < 6) {
+      setMessage('Password must be at least 6 characters long');
+      return;
+    }
+
     setIsLoading(true);
     setMessage('');
+
     try {
-      const res = await axios.post('http://localhost:3000/auth/signup', form, {
-        headers: { 'Content-Type': 'application/json' },
-      });
-      setMessage('Signup successful!');
-      localStorage.setItem('token', res.data.token);
-      setTimeout(() => {
-        navigate('/profileform');
-      }, 2000);
+      const res = await axios.post(
+        'http://localhost:5000/register',
+        {
+          username: form.username,
+          password: form.password,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+
+      if (res.data.status === 'User registered successfully') {
+        setMessage('Account created! Redirecting to login...');
+        setTimeout(() => {
+          navigate('/login');
+        }, 1800);
+      } else {
+        setMessage('Unexpected response from server');
+      }
     } catch (err) {
-      setMessage(err.response?.data?.error || 'Signup failed');
+      const errorMsg =
+        err.response?.data?.error ||
+        'Signup failed – is the backend running on port 5000?';
+      setMessage(errorMsg);
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleGoogleSignup = () => {
-    window.location.href = 'http://localhost:3000/auth/google';
   };
 
   const handleLoginRedirect = () => {
@@ -59,23 +95,23 @@ function Signup() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden py-12">
-      {/* Animated Grid Background */}
+      {/* Animated Grid Background + Floating Orbs + Mouse Glow (unchanged) */}
       <div className="absolute inset-0 opacity-20">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `linear-gradient(to right, rgba(59, 130, 246, 0.1) 1px, transparent 1px),
-                           linear-gradient(to bottom, rgba(59, 130, 246, 0.1) 1px, transparent 1px)`,
-          backgroundSize: '80px 80px'
-        }} />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `linear-gradient(to right, rgba(59, 130, 246, 0.1) 1px, transparent 1px),
+                             linear-gradient(to bottom, rgba(59, 130, 246, 0.1) 1px, transparent 1px)`,
+            backgroundSize: '80px 80px',
+          }}
+        />
       </div>
 
-      {/* Floating Orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-64 h-64 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 rounded-full blur-3xl animate-float" />
         <div className="absolute bottom-20 right-20 w-96 h-96 bg-gradient-to-r from-purple-500/15 to-indigo-500/15 rounded-full blur-3xl animate-float-delayed" />
         <div className="absolute top-1/2 left-1/3 w-80 h-80 bg-gradient-to-r from-emerald-500/15 to-teal-500/15 rounded-full blur-3xl animate-float-slow" />
-        
-        {/* Interactive Mouse Glow */}
-        <div 
+        <div
           className="absolute w-[600px] h-[600px] bg-gradient-radial from-blue-500/10 via-cyan-500/5 to-transparent rounded-full transition-all duration-700 ease-out pointer-events-none blur-2xl"
           style={{ left: mousePosition.x - 300, top: mousePosition.y - 300 }}
         />
@@ -83,19 +119,10 @@ function Signup() {
 
       {/* Main Container */}
       <div className="relative z-10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-2xl p-8 md:p-12 rounded-3xl shadow-2xl border border-slate-700/50 max-w-6xl w-full mx-4 flex flex-col md:flex-row items-center gap-12">
-        
-        {/* Glow Effect */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 rounded-3xl blur-xl" />
-        <div className="absolute -top-4 -right-4 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-cyan-500/20 rounded-full blur-3xl" />
-
-        {/* Lottie Animation Section */}
+        {/* Lottie + Glow + Badge (unchanged) */}
         <div className="md:w-1/2 w-full relative">
           <div className="relative">
-            {/* Glow behind animation */}
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-purple-500/20 blur-3xl animate-pulse" />
-            
-            {/* Security Badge */}
             <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 z-20">
               <div className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 rounded-full backdrop-blur-xl">
                 <Shield className="w-4 h-4 text-emerald-400" />
@@ -106,21 +133,17 @@ function Signup() {
                 </span>
               </div>
             </div>
-            
-            <Lottie 
-              animationData={SignupAnimation} 
-              loop={true} 
-              className="w-full max-w-md mx-auto relative z-10" 
-              style={{ 
-                filter: 'drop-shadow(0 0 40px rgba(59, 130, 246, 0.3))'
-              }}
+            <Lottie
+              animationData={SignupAnimation}
+              loop={true}
+              className="w-full max-w-md mx-auto relative z-10"
+              style={{ filter: 'drop-shadow(0 0 40px rgba(59, 130, 246, 0.3))' }}
             />
           </div>
         </div>
 
-        {/* Signup Form Section */}
+        {/* Form Section */}
         <div className="md:w-1/2 w-full relative z-10">
-          {/* Header */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center space-x-2 mb-4">
               <UserPlus className="w-8 h-8 text-cyan-400" />
@@ -131,13 +154,14 @@ function Signup() {
             <p className="text-slate-400 text-sm">Join SecureTrust and protect your digital life</p>
           </div>
 
-          {/* Message Display */}
           {message && (
-            <div className={`mb-6 p-4 rounded-xl border backdrop-blur-sm animate-slide-down ${
-              message.includes('successful') 
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
-                : 'bg-red-500/10 border-red-500/30 text-red-400'
-            }`}>
+            <div
+              className={`mb-6 p-4 rounded-xl border backdrop-blur-sm animate-slide-down ${
+                message.includes('created') || message.includes('successful')
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-red-500/10 border-red-500/30 text-red-400'
+              }`}
+            >
               <div className="flex items-center space-x-2">
                 <Sparkles className="w-5 h-5" />
                 <p className="font-medium">{message}</p>
@@ -145,26 +169,25 @@ function Signup() {
             </div>
           )}
 
-          {/* Signup Form */}
           <form onSubmit={handleSubmit} className="space-y-5 mb-6">
-            {/* Name Input */}
+            {/* Username */}
             <div className="relative group">
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               <div className="relative">
                 <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-cyan-400 transition-colors duration-300" />
                 <input
-                  name="name"
-                  placeholder="Full Name"
-                  value={form.name}
+                  name="username"
+                  placeholder="Username"
+                  value={form.username}
                   onChange={handleChange}
                   required
+                  autoComplete="username"
                   className="w-full p-4 pl-12 bg-slate-800/50 border border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all duration-300 text-white placeholder-slate-500 backdrop-blur-sm"
                 />
               </div>
             </div>
 
-
-            {/* Password Input */}
+            {/* Password */}
             <div className="relative group">
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               <div className="relative">
@@ -176,6 +199,7 @@ function Signup() {
                   value={form.password}
                   onChange={handleChange}
                   required
+                  autoComplete="new-password"
                   className="w-full p-4 pl-12 pr-12 bg-slate-800/50 border border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all duration-300 text-white placeholder-slate-500 backdrop-blur-sm"
                 />
                 <button
@@ -188,10 +212,56 @@ function Signup() {
               </div>
             </div>
 
-            {/* Submit Button */}
+            {/* Confirm Password */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-cyan-400 transition-colors duration-300" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  name="confirmPassword"
+                  placeholder="Confirm Password"
+                  value={form.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  autoComplete="new-password"
+                  className="w-full p-4 pl-12 pr-16 bg-slate-800/50 border border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all duration-300 text-white placeholder-slate-500 backdrop-blur-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-cyan-400 transition-colors duration-300"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+
+                {form.confirmPassword && (
+                  <div className="absolute right-12 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                    {passwordMatch ? (
+                      <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    ) : (
+                      <X className="w-5 h-5 text-red-400" />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {form.confirmPassword && !passwordMatch && (
+                <p className="text-red-400 text-xs mt-2 ml-1 animate-slide-down">
+                  Passwords do not match
+                </p>
+              )}
+              {form.confirmPassword && passwordMatch && form.confirmPassword.length > 0 && (
+                <p className="text-emerald-400 text-xs mt-2 ml-1 animate-slide-down">
+                  Passwords match!
+                </p>
+              )}
+            </div>
+
+            {/* Submit */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !passwordMatch || !form.username.trim()}
               className="group relative w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/50 transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -219,7 +289,6 @@ function Signup() {
             </button>
           </form>
 
-          {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-700"></div>
@@ -231,8 +300,6 @@ function Signup() {
             </div>
           </div>
 
-
-          {/* Login Link */}
           <div className="mt-6 text-center">
             <button
               onClick={handleLoginRedirect}
@@ -251,10 +318,18 @@ function Signup() {
               <Shield className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" />
               <div className="text-xs text-slate-400 leading-relaxed">
                 <p className="mb-2">
-                  By creating an account, you agree to our <span className="text-cyan-400 hover:text-cyan-300 cursor-pointer hover:underline">Terms of Service</span> and <span className="text-cyan-400 hover:text-cyan-300 cursor-pointer hover:underline">Privacy Policy</span>.
+                  By creating an account, you agree to our{' '}
+                  <span className="text-cyan-400 hover:text-cyan-300 cursor-pointer hover:underline">
+                    Terms of Service
+                  </span>{' '}
+                  and{' '}
+                  <span className="text-cyan-400 hover:text-cyan-300 cursor-pointer hover:underline">
+                    Privacy Policy
+                  </span>.
                 </p>
                 <p>
-                  Your data is protected with <span className="text-emerald-400 font-semibold">military-grade encryption</span>.
+                  Your data is protected with{' '}
+                  <span className="text-emerald-400 font-semibold">military-grade encryption</span>.
                 </p>
               </div>
             </div>
@@ -263,26 +338,11 @@ function Signup() {
       </div>
 
       <style jsx>{`
-        @keyframes float { 
-          0%, 100% { transform: translateY(0px); } 
-          50% { transform: translateY(-30px); } 
-        }
-        @keyframes float-delayed { 
-          0%, 100% { transform: translateY(0px); } 
-          50% { transform: translateY(-20px); } 
-        }
-        @keyframes float-slow { 
-          0%, 100% { transform: translateY(0px); } 
-          50% { transform: translateY(-15px); } 
-        }
-        @keyframes shimmer { 
-          0% { transform: translateX(-100%); } 
-          100% { transform: translateX(100%); } 
-        }
-        @keyframes slide-down {
-          from { transform: translateY(-10px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
+        @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-30px); } }
+        @keyframes float-delayed { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }
+        @keyframes float-slow { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-15px); } }
+        @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        @keyframes slide-down { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         
         .animate-float { animation: float 8s ease-in-out infinite; }
         .animate-float-delayed { animation: float-delayed 10s ease-in-out infinite; }

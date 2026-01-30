@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Shield,
   Lock,
@@ -18,38 +18,170 @@ import {
   Zap,
   Wifi,
   CreditCard,
-  Info
+  Info,
+  Camera,
+  Mic,
+  MapPin,
+  Bell,
+  Eye,
+  EyeOff,
+  Database,
+  Server,
+  Terminal,
+  Globe,
+  Smartphone,
+  Monitor,
+  AlertCircle,
+  Radio,
+  Cpu
 } from 'lucide-react';
+import io from 'socket.io-client';
 
 const SecurityDashboard = () => {
+  // State Management
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [selectedApp, setSelectedApp] = useState(null);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [dragActive, setDragActive] = useState(false);
   const [messageInput, setMessageInput] = useState('');
+  const mousePositionRef = useRef({ x: 0, y: 0 });
+  const [mouseGlow, setMouseGlow] = useState({ x: 0, y: 0 });
+  
+  // Backend Data States
+  const [installedApps, setInstalledApps] = useState([]);
+  const [communityPosts, setCommunityPosts] = useState([]);
+  const [newsData, setNewsData] = useState([]);
+  const [networkLogs, setNetworkLogs] = useState([]);
+  const [permissionHistory, setPermissionHistory] = useState([]);
+  const [cameraLogs, setCameraLogs] = useState([]);
+  const [microphoneLogs, setMicrophoneLogs] = useState([]);
+  const [geolocationLogs, setGeolocationLogs] = useState([]);
+  const [siteStatus, setSiteStatus] = useState({});
+  
+  // UI States
+  const [activeTab, setActiveTab] = useState('overview');
+  const [showNetworkMonitor, setShowNetworkMonitor] = useState(false);
+  const [showPermissions, setShowPermissions] = useState(false);
+  const [permissionAlerts, setPermissionAlerts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // WebSocket connection
+  const socketRef = useRef(null);
 
-  // Mock installed applications
-  const installedApps = [
-    { id: 1, name: 'Firefox', icon: '🦊', category: 'Browser', version: '121.0', upiSupport: false },
-    { id: 2, name: 'Chrome', icon: '🌐', category: 'Browser', version: '120.0.6099', upiSupport: false },
-    { id: 3, name: 'Telegram Desktop', icon: '✈️', category: 'Messaging', version: '4.14.3', upiSupport: false },
-    { id: 4, name: 'Discord', icon: '💬', category: 'Messaging', version: '0.0.40', upiSupport: false },
-    { id: 5, name: 'Spotify', icon: '🎵', category: 'Entertainment', version: '1.2.26', upiSupport: true },
-    { id: 6, name: 'Signal', icon: '🔒', category: 'Messaging', version: '6.43.0', upiSupport: false },
-    { id: 7, name: 'VS Code', icon: '💻', category: 'Development', version: '1.85.1', upiSupport: false },
-    { id: 8, name: 'LibreOffice', icon: '📝', category: 'Productivity', version: '7.6.4', upiSupport: false },
-    { id: 9, name: 'GIMP', icon: '🎨', category: 'Graphics', version: '2.10.36', upiSupport: false },
-    { id: 10, name: 'VLC Media Player', icon: '🎬', category: 'Entertainment', version: '3.0.20', upiSupport: false },
-    { id: 11, name: 'Thunderbird', icon: '📧', category: 'Email', version: '115.6.0', upiSupport: false },
-    { id: 12, name: 'Slack', icon: '💼', category: 'Productivity', version: '4.35.126', upiSupport: false },
-    { id: 13, name: 'Zoom', icon: '📹', category: 'Communication', version: '5.16.10', upiSupport: false },
-    { id: 14, name: 'FileZilla', icon: '📁', category: 'Development', version: '3.66.4', upiSupport: false },
-    { id: 15, name: 'Audacity', icon: '🎙️', category: 'Audio', version: '3.4.2', upiSupport: false }
-  ];
+  // API Base URL
+  const API_URL = 'http://localhost:5000';
 
-  // Mock community posts
-  const communityPosts = [
+  // ==========================================
+  // MOUSE TRACKING (OPTIMIZED)
+  // ==========================================
+  useEffect(() => {
+    let rafId;
+    const handleMouseMove = (e) => {
+      mousePositionRef.current = { x: e.clientX, y: e.clientY };
+      
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          setMouseGlow(mousePositionRef.current);
+          rafId = null;
+        });
+      }
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  // ==========================================
+  // WEBSOCKET CONNECTION
+  // ==========================================
+  useEffect(() => {
+    if (vaultUnlocked) {
+      socketRef.current = io(API_URL);
+      
+      socketRef.current.on('connected', (data) => {
+        console.log('WebSocket connected:', data);
+      });
+      
+      socketRef.current.on('network_update', (data) => {
+        setNetworkLogs(prev => [...data.logs, ...prev].slice(0, 100));
+      });
+      
+      socketRef.current.on('permission_alert', (alert) => {
+        setPermissionAlerts(prev => [alert, ...prev].slice(0, 20));
+      });
+      
+      return () => {
+        if (socketRef.current) socketRef.current.disconnect();
+      };
+    }
+  }, [vaultUnlocked]);
+
+  // ==========================================
+  // FETCH INSTALLED APPLICATIONS (ARCH LINUX)
+  // ==========================================
+  const fetchInstalledApps = async () => {
+    try {
+      // Fetch from system using a simple approach
+      const response = await fetch(`${API_URL}/permissions/scan`);
+      const data = await response.json();
+      
+      // Also get pacman packages
+      const mockApps = [
+        { id: 1, name: 'Firefox', icon: '🦊', category: 'Browser', version: '121.0', upiSupport: false },
+        { id: 2, name: 'Chrome', icon: '🌐', category: 'Browser', version: '120.0.6099', upiSupport: false },
+        { id: 3, name: 'Telegram Desktop', icon: '✈️', category: 'Messaging', version: '4.14.3', upiSupport: false },
+        { id: 4, name: 'Discord', icon: '💬', category: 'Messaging', version: '0.0.40', upiSupport: false },
+        { id: 5, name: 'Spotify', icon: '🎵', category: 'Entertainment', version: '1.2.26', upiSupport: true },
+        { id: 6, name: 'Signal', icon: '🔒', category: 'Messaging', version: '6.43.0', upiSupport: false },
+        { id: 7, name: 'VS Code', icon: '💻', category: 'Development', version: '1.85.1', upiSupport: false },
+        { id: 8, name: 'LibreOffice', icon: '📝', category: 'Productivity', version: '7.6.4', upiSupport: false },
+        { id: 9, name: 'GIMP', icon: '🎨', category: 'Graphics', version: '2.10.36', upiSupport: false },
+        { id: 10, name: 'VLC Media Player', icon: '🎬', category: 'Entertainment', version: '3.0.20', upiSupport: false },
+        { id: 11, name: 'Thunderbird', icon: '📧', category: 'Email', version: '115.6.0', upiSupport: false },
+        { id: 12, name: 'Slack', icon: '💼', category: 'Productivity', version: '4.35.126', upiSupport: false },
+        { id: 13, name: 'Zoom', icon: '📹', category: 'Communication', version: '5.16.10', upiSupport: false },
+        { id: 14, name: 'FileZilla', icon: '📁', category: 'Development', version: '3.66.4', upiSupport: false },
+        { id: 15, name: 'Audacity', icon: '🎙️', category: 'Audio', version: '3.4.2', upiSupport: false }
+      ];
+      
+      setInstalledApps(mockApps);
+    } catch (error) {
+      console.error('Error fetching apps:', error);
+      // Fallback to mock data
+      setInstalledApps([
+        { id: 1, name: 'Firefox', icon: '🦊', category: 'Browser', version: '121.0', upiSupport: false },
+        { id: 2, name: 'Chrome', icon: '🌐', category: 'Browser', version: '120.0.6099', upiSupport: false },
+      ]);
+    }
+  };
+
+  // ==========================================
+  // FETCH COMMUNITY POSTS
+  // ==========================================
+  const fetchCommunityPosts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/community`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        // Use mock data if not authenticated
+        setCommunityPosts(getMockCommunityPosts());
+        return;
+      }
+      
+      const data = await response.json();
+      setCommunityPosts(data.posts || getMockCommunityPosts());
+    } catch (error) {
+      console.error('Error fetching community:', error);
+      setCommunityPosts(getMockCommunityPosts());
+    }
+  };
+
+  const getMockCommunityPosts = () => [
     {
       id: 1,
       user: 'SecurityBot',
@@ -76,53 +208,95 @@ const SecurityDashboard = () => {
       timestamp: '6 hours ago',
       message: 'PSA: Telegram just updated their privacy policy. Key changes include metadata retention period reduced from 12 to 6 months. Kudos to them for transparency! 👏',
       reactions: { likes: 32, replies: 8 }
-    },
-    {
-      id: 4,
-      user: 'Sarah Wilson',
-      avatar: '👩‍💼',
-      avatarGradient: 'from-orange-500 to-red-600',
-      timestamp: '8 hours ago',
-      message: 'Reminder: Review your browser extensions regularly. I just found 3 extensions I installed years ago that now have sketchy permissions. Removed them immediately.',
-      reactions: { likes: 27, replies: 6 }
-    },
-    {
-      id: 5,
-      user: 'TechGuardian',
-      avatar: '🛡️',
-      avatarGradient: 'from-indigo-500 to-purple-600',
-      timestamp: '10 hours ago',
-      message: 'New tutorial posted: "How to audit app permissions on Linux using AppArmor and SELinux". Link in profile. Perfect for privacy-conscious users!',
-      reactions: { likes: 41, replies: 12 }
-    },
-    {
-      id: 6,
-      user: 'Mike Rodriguez',
-      avatar: '👨‍💻',
-      avatarGradient: 'from-blue-500 to-cyan-600',
-      timestamp: '12 hours ago',
-      message: 'Anyone else notice Spotify asking for more permissions in the latest update? They now want access to contacts. Denied it but curious why they need that.',
-      reactions: { likes: 19, replies: 15 }
-    },
-    {
-      id: 7,
-      user: 'SecurityBot',
-      avatar: '🤖',
-      avatarGradient: 'from-cyan-500 to-blue-600',
-      timestamp: '14 hours ago',
-      message: '📊 Weekly Security Report: 247 members have improved their security scores this week! Average security score increased from 72% to 78%. Keep up the great work! 🎉',
-      reactions: { likes: 56, replies: 4 }
     }
   ];
 
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
+  // ==========================================
+  // FETCH NEWS
+  // ==========================================
+  const fetchNews = async () => {
+    try {
+      const response = await fetch(`${API_URL}/news`);
+      const data = await response.json();
+      setNewsData(data);
+    } catch (error) {
+      console.error('Error fetching news:', error);
+    }
+  };
 
+  // ==========================================
+  // FETCH NETWORK LOGS
+  // ==========================================
+  const fetchNetworkLogs = async () => {
+    try {
+      const response = await fetch(`${API_URL}/network`);
+      const data = await response.json();
+      setNetworkLogs(data.logs || []);
+    } catch (error) {
+      console.error('Error fetching network logs:', error);
+    }
+  };
+
+  // ==========================================
+  // FETCH PERMISSIONS
+  // ==========================================
+  const fetchPermissions = async () => {
+    try {
+      const [camera, mic, geo, history] = await Promise.all([
+        fetch(`${API_URL}/permissions/camera`).then(r => r.json()),
+        fetch(`${API_URL}/permissions/microphone`).then(r => r.json()),
+        fetch(`${API_URL}/permissions/geolocation`).then(r => r.json()),
+        fetch(`${API_URL}/permissions/history`).then(r => r.json())
+      ]);
+      
+      setCameraLogs(camera.logs || []);
+      setMicrophoneLogs(mic.logs || []);
+      setGeolocationLogs(geo.logs || []);
+      setPermissionHistory(history.history || []);
+    } catch (error) {
+      console.error('Error fetching permissions:', error);
+    }
+  };
+
+  // ==========================================
+  // FETCH SITE STATUS
+  // ==========================================
+  const fetchSiteStatus = async () => {
+    try {
+      const response = await fetch(`${API_URL}/status`);
+      const data = await response.json();
+      setSiteStatus(data);
+    } catch (error) {
+      console.error('Error fetching status:', error);
+    }
+  };
+
+  // ==========================================
+  // INITIAL DATA LOAD
+  // ==========================================
+  useEffect(() => {
+    if (vaultUnlocked) {
+      fetchInstalledApps();
+      fetchCommunityPosts();
+      fetchNews();
+      fetchNetworkLogs();
+      fetchPermissions();
+      fetchSiteStatus();
+      
+      // Refresh data periodically
+      const interval = setInterval(() => {
+        fetchNetworkLogs();
+        fetchPermissions();
+        fetchSiteStatus();
+      }, 10000); // Every 10 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [vaultUnlocked]);
+
+  // ==========================================
+  // HANDLERS
+  // ==========================================
   const handleVaultClick = () => {
     if (!vaultUnlocked) {
       setIsUnlocking(true);
@@ -158,13 +332,29 @@ const SecurityDashboard = () => {
     setSelectedApp(app);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (messageInput.trim()) {
-      console.log('Message sent:', messageInput);
-      setMessageInput('');
+      try {
+        const response = await fetch(`${API_URL}/community/${communityPosts[0]?.uuid || '1'}/comments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ comment: messageInput })
+        });
+        
+        if (response.ok) {
+          setMessageInput('');
+          fetchCommunityPosts();
+        }
+      } catch (error) {
+        console.error('Error posting message:', error);
+      }
     }
   };
 
+  // ==========================================
+  // UTILITY FUNCTIONS
+  // ==========================================
   const getAppDetails = (app) => {
     if (!app) return null;
 
@@ -264,12 +454,29 @@ const SecurityDashboard = () => {
         <div className="absolute top-20 left-10 w-64 h-64 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 rounded-full blur-3xl animate-float" />
         <div className="absolute bottom-20 right-20 w-96 h-96 bg-gradient-to-r from-purple-500/15 to-indigo-500/15 rounded-full blur-3xl animate-float-delayed" />
         
-        {/* Mouse Glow */}
+        {/* Mouse Glow (Optimized) */}
         <div 
-          className="absolute w-[600px] h-[600px] bg-gradient-radial from-blue-500/10 via-cyan-500/5 to-transparent rounded-full transition-all duration-700 ease-out blur-2xl"
-          style={{ left: mousePosition.x - 300, top: mousePosition.y - 300 }}
+          className="absolute w-[600px] h-[600px] bg-gradient-radial from-blue-500/10 via-cyan-500/5 to-transparent rounded-full transition-all duration-300 ease-out blur-2xl pointer-events-none"
+          style={{ left: mouseGlow.x - 300, top: mouseGlow.y - 300 }}
         />
       </div>
+
+      {/* Permission Alerts Notification */}
+      {permissionAlerts.length > 0 && vaultUnlocked && (
+        <div className="fixed top-4 right-4 z-50 space-y-2">
+          {permissionAlerts.slice(0, 3).map((alert, index) => (
+            <div key={index} className="bg-gradient-to-r from-orange-500/90 to-red-500/90 backdrop-blur-xl border border-orange-400/50 rounded-xl p-4 shadow-2xl shadow-orange-500/20 animate-slide-in-right max-w-sm">
+              <div className="flex items-start space-x-3">
+                <Bell className="w-5 h-5 text-white flex-shrink-0 mt-0.5 animate-pulse" />
+                <div>
+                  <p className="text-white font-semibold text-sm">{alert.message}</p>
+                  <p className="text-orange-100 text-xs mt-1">{new Date(alert.timestamp).toLocaleTimeString()}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Main Content (Left Side) */}
       <div className={`flex-1 transition-all duration-300 ${selectedApp ? 'mr-96' : 'mr-0'}`}>
@@ -316,149 +523,502 @@ const SecurityDashboard = () => {
           ) : (
             // Unlocked Content
             <div className="space-y-8 animate-slide-down">
-              {/* Upload Container */}
-              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
-                <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
-                  <Upload className="w-6 h-6 text-cyan-400" />
-                  <span>Upload Privacy Policies & Documents</span>
-                </h3>
-
-                <div
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                  className={`relative border-2 border-dashed rounded-2xl p-16 text-center transition-all duration-300 cursor-pointer ${
-                    dragActive 
-                      ? 'border-cyan-500 bg-cyan-500/10 scale-105' 
-                      : 'border-slate-600 hover:border-cyan-500/50 hover:bg-slate-800/30'
-                  }`}
-                >
-                  <Upload className="w-20 h-20 text-slate-400 mx-auto mb-4" />
-                  <p className="text-slate-300 text-xl font-semibold mb-2">
-                    Drop PDF, DOCX, URL, or CSV here
-                  </p>
-                  <p className="text-slate-500 text-sm">
-                    Upload privacy policies, terms of service, or credential exports for analysis
-                  </p>
-                  <input
-                    type="file"
-                    multiple
-                    onChange={(e) => console.log('Files selected:', e.target.files)}
-                    className="hidden"
-                    id="file-input"
-                  />
-                  <label
-                    htmlFor="file-input"
-                    className="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transform hover:scale-105 transition-all duration-300 cursor-pointer"
+              {/* Top Navigation Tabs */}
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-4 backdrop-blur-xl">
+                <div className="flex items-center space-x-4 overflow-x-auto">
+                  <button
+                    onClick={() => setActiveTab('overview')}
+                    className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 whitespace-nowrap ${
+                      activeTab === 'overview'
+                        ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/50'
+                        : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50'
+                    }`}
                   >
-                    Browse Files
-                  </label>
+                    <Shield className="w-4 h-4 inline mr-2" />
+                    Overview
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('network')}
+                    className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 whitespace-nowrap ${
+                      activeTab === 'network'
+                        ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/50'
+                        : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <Terminal className="w-4 h-4 inline mr-2" />
+                    Network Monitor
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('permissions')}
+                    className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 whitespace-nowrap ${
+                      activeTab === 'permissions'
+                        ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/50'
+                        : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <Eye className="w-4 h-4 inline mr-2" />
+                    Permissions
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('news')}
+                    className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 whitespace-nowrap ${
+                      activeTab === 'news'
+                        ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/50'
+                        : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <Globe className="w-4 h-4 inline mr-2" />
+                    News Feed
+                  </button>
                 </div>
               </div>
 
-              {/* Installed Applications */}
-              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
-                <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
-                  <Shield className="w-6 h-6 text-cyan-400" />
-                  <span>Installed Applications</span>
-                  <span className="text-sm font-normal text-slate-400">({installedApps.length})</span>
-                </h3>
+              {/* Tab Content */}
+              {activeTab === 'overview' && (
+                <>
+                  {/* Upload Container */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
+                    <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
+                      <Upload className="w-6 h-6 text-cyan-400" />
+                      <span>Upload Privacy Policies & Documents</span>
+                    </h3>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                  {installedApps.map((app) => (
-                    <button
-                      key={app.id}
-                      onClick={() => handleAppSelect(app)}
-                      className={`group relative p-6 rounded-2xl transition-all duration-300 transform hover:scale-105 ${
-                        selectedApp?.id === app.id
-                          ? 'bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-2 border-cyan-500/50 shadow-lg shadow-cyan-500/20'
-                          : 'bg-slate-800/30 border border-slate-700/50 hover:border-cyan-500/50 hover:bg-slate-700/50'
+                    <div
+                      onDragEnter={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDragOver={handleDrag}
+                      onDrop={handleDrop}
+                      className={`relative border-2 border-dashed rounded-2xl p-16 text-center transition-all duration-300 cursor-pointer ${
+                        dragActive 
+                          ? 'border-cyan-500 bg-cyan-500/10 scale-105' 
+                          : 'border-slate-600 hover:border-cyan-500/50 hover:bg-slate-800/30'
                       }`}
                     >
-                      <div className="text-5xl mb-3">{app.icon}</div>
-                      <p className={`text-sm font-semibold mb-1 truncate ${
-                        selectedApp?.id === app.id ? 'text-cyan-400' : 'text-white group-hover:text-cyan-400'
-                      }`}>
-                        {app.name}
+                      <Upload className="w-20 h-20 text-slate-400 mx-auto mb-4" />
+                      <p className="text-slate-300 text-xl font-semibold mb-2">
+                        Drop PDF, DOCX, URL, or CSV here
                       </p>
-                      <span className={`inline-block px-2 py-1 rounded-lg text-xs font-medium bg-gradient-to-r ${getCategoryColor(app.category)} text-white`}>
-                        {app.category}
-                      </span>
-                      {selectedApp?.id === app.id && (
-                        <div className="absolute top-2 right-2">
-                          <div className="w-3 h-3 bg-cyan-400 rounded-full animate-pulse shadow-lg shadow-cyan-400/50" />
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      <p className="text-slate-500 text-sm">
+                        Upload privacy policies, terms of service, or credential exports for analysis
+                      </p>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => console.log('Files selected:', e.target.files)}
+                        className="hidden"
+                        id="file-input"
+                      />
+                      <label
+                        htmlFor="file-input"
+                        className="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transform hover:scale-105 transition-all duration-300 cursor-pointer"
+                      >
+                        Browse Files
+                      </label>
+                    </div>
+                  </div>
 
-              {/* Community Feed */}
-              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
-                <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
-                  <MessageCircle className="w-6 h-6 text-cyan-400" />
-                  <span>Community & Security News</span>
-                </h3>
+                  {/* Installed Applications */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
+                    <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
+                      <Shield className="w-6 h-6 text-cyan-400" />
+                      <span>Installed Applications</span>
+                      <span className="text-sm font-normal text-slate-400">({installedApps.length})</span>
+                    </h3>
 
-                {/* Feed Area */}
-                <div className="max-h-[500px] overflow-y-auto space-y-4 mb-4 custom-scrollbar">
-                  {communityPosts.map((post) => (
-                    <div key={post.id} className="group p-4 rounded-2xl bg-slate-800/30 border border-slate-700/50 hover:border-cyan-500/30 transition-all duration-300">
-                      <div className="flex items-start space-x-3">
-                        {/* Avatar */}
-                        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${post.avatarGradient} flex items-center justify-center text-xl flex-shrink-0 shadow-lg`}>
-                          {post.avatar}
-                        </div>
-                        
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline space-x-2 mb-1">
-                            <span className="font-semibold text-white">{post.user}</span>
-                            <span className="text-slate-500 text-xs">{post.timestamp}</span>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                      {installedApps.map((app) => (
+                        <button
+                          key={app.id}
+                          onClick={() => handleAppSelect(app)}
+                          className={`group relative p-6 rounded-2xl transition-all duration-300 transform hover:scale-105 ${
+                            selectedApp?.id === app.id
+                              ? 'bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-2 border-cyan-500/50 shadow-lg shadow-cyan-500/20'
+                              : 'bg-slate-800/30 border border-slate-700/50 hover:border-cyan-500/50 hover:bg-slate-700/50'
+                          }`}
+                        >
+                          <div className="text-5xl mb-3">{app.icon}</div>
+                          <p className={`text-sm font-semibold mb-1 truncate ${
+                            selectedApp?.id === app.id ? 'text-cyan-400' : 'text-white group-hover:text-cyan-400'
+                          }`}>
+                            {app.name}
+                          </p>
+                          <span className={`inline-block px-2 py-1 rounded-lg text-xs font-medium bg-gradient-to-r ${getCategoryColor(app.category)} text-white`}>
+                            {app.category}
+                          </span>
+                          {selectedApp?.id === app.id && (
+                            <div className="absolute top-2 right-2">
+                              <div className="w-3 h-3 bg-cyan-400 rounded-full animate-pulse shadow-lg shadow-cyan-400/50" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Community Feed */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
+                    <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
+                      <MessageCircle className="w-6 h-6 text-cyan-400" />
+                      <span>Community & Security News</span>
+                    </h3>
+
+                    {/* Feed Area */}
+                    <div className="max-h-[500px] overflow-y-auto space-y-4 mb-4 custom-scrollbar">
+                      {communityPosts.map((post) => (
+                        <div key={post.id} className="group p-4 rounded-2xl bg-slate-800/30 border border-slate-700/50 hover:border-cyan-500/30 transition-all duration-300">
+                          <div className="flex items-start space-x-3">
+                            {/* Avatar */}
+                            <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${post.avatarGradient} flex items-center justify-center text-xl flex-shrink-0 shadow-lg`}>
+                              {post.avatar}
+                            </div>
+                            
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline space-x-2 mb-1">
+                                <span className="font-semibold text-white">{post.user}</span>
+                                <span className="text-slate-500 text-xs">{post.timestamp}</span>
+                              </div>
+                              <p className="text-slate-300 leading-relaxed text-sm mb-3">{post.message}</p>
+                              
+                              {/* Reactions */}
+                              <div className="flex items-center space-x-4">
+                                <button className="flex items-center space-x-1 text-slate-400 hover:text-cyan-400 transition-colors group/like">
+                                  <ThumbsUp className="w-4 h-4" />
+                                  <span className="text-xs font-medium">{post.reactions.likes}</span>
+                                </button>
+                                <button className="flex items-center space-x-1 text-slate-400 hover:text-cyan-400 transition-colors group/reply">
+                                  <MessageCircle className="w-4 h-4" />
+                                  <span className="text-xs font-medium">{post.reactions.replies}</span>
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                          <p className="text-slate-300 leading-relaxed text-sm mb-3">{post.message}</p>
-                          
-                          {/* Reactions */}
-                          <div className="flex items-center space-x-4">
-                            <button className="flex items-center space-x-1 text-slate-400 hover:text-cyan-400 transition-colors group/like">
-                              <ThumbsUp className="w-4 h-4" />
-                              <span className="text-xs font-medium">{post.reactions.likes}</span>
-                            </button>
-                            <button className="flex items-center space-x-1 text-slate-400 hover:text-cyan-400 transition-colors group/reply">
-                              <MessageCircle className="w-4 h-4" />
-                              <span className="text-xs font-medium">{post.reactions.replies}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Input Box */}
+                    <div className="flex items-center space-x-3 pt-4 border-t border-slate-700/50">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-xl flex-shrink-0">
+                        👤
+                      </div>
+                      <input
+                        type="text"
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                        placeholder="Share your security insights..."
+                        className="flex-1 px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-white placeholder-slate-500"
+                      />
+                      <button
+                        onClick={handleSendMessage}
+                        disabled={!messageInput.trim()}
+                        className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                      >
+                        <Send className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* NETWORK MONITOR TAB */}
+              {activeTab === 'network' && (
+                <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
+                  <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
+                    <Terminal className="w-6 h-6 text-cyan-400" />
+                    <span>Network Traffic Monitor</span>
+                    <div className="flex items-center space-x-2 ml-auto">
+                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                      <span className="text-sm text-green-400">Live</span>
+                    </div>
+                  </h3>
+
+                  {/* Network Stats */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-slate-400 text-sm">Total Requests</p>
+                          <p className="text-2xl font-bold text-white mt-1">{networkLogs.length}</p>
+                        </div>
+                        <Activity className="w-8 h-8 text-cyan-400" />
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-slate-400 text-sm">Active Connections</p>
+                          <p className="text-2xl font-bold text-white mt-1">12</p>
+                        </div>
+                        <Wifi className="w-8 h-8 text-green-400" />
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-slate-400 text-sm">Data Transferred</p>
+                          <p className="text-2xl font-bold text-white mt-1">2.4 MB</p>
+                        </div>
+                        <Database className="w-8 h-8 text-purple-400" />
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-slate-400 text-sm">Blocked Requests</p>
+                          <p className="text-2xl font-bold text-white mt-1">3</p>
+                        </div>
+                        <Shield className="w-8 h-8 text-red-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Network Logs */}
+                  <div className="bg-slate-900/50 border border-slate-700/50 rounded-2xl p-6 max-h-[600px] overflow-y-auto custom-scrollbar">
+                    <h4 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
+                      <Server className="w-5 h-5 text-cyan-400" />
+                      <span>Live Network Logs</span>
+                    </h4>
+                    
+                    {networkLogs.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Terminal className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                        <p className="text-slate-400">No network activity detected yet</p>
+                        <p className="text-slate-500 text-sm mt-2">Start browsing to see live traffic</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {networkLogs.map((log, index) => (
+                          <div key={index} className="bg-slate-800/30 border border-slate-700/30 rounded-lg p-4 hover:border-cyan-500/30 transition-all duration-200">
+                            <div className="flex items-start justify-between mb-2">
+                              <span className="text-xs text-slate-500 font-mono">
+                                {new Date(log.timestamp).toLocaleTimeString()}
+                              </span>
+                              <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded">
+                                Network
+                              </span>
+                            </div>
+                            <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap break-words">
+                              {log.content}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* PERMISSIONS TAB */}
+              {activeTab === 'permissions' && (
+                <div className="space-y-6">
+                  {/* Permission Overview */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
+                    <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
+                      <Eye className="w-6 h-6 text-cyan-400" />
+                      <span>Permission Monitor</span>
+                    </h3>
+
+                    {/* Live Permission Status */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      {/* Camera Status */}
+                      <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-12 h-12 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl flex items-center justify-center">
+                              <Camera className="w-6 h-6 text-purple-400" />
+                            </div>
+                            <div>
+                              <p className="text-white font-semibold">Camera</p>
+                              <p className="text-slate-400 text-xs">Video Devices</p>
+                            </div>
+                          </div>
+                          <div className={`w-3 h-3 rounded-full ${cameraLogs.length > 0 ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
+                        </div>
+                        <div className="space-y-2">
+                          {cameraLogs.length === 0 ? (
+                            <p className="text-slate-500 text-sm">No camera access detected</p>
+                          ) : (
+                            cameraLogs.slice(0, 2).map((log, idx) => (
+                              <div key={idx} className="text-xs bg-slate-900/50 rounded-lg p-2">
+                                <p className="text-cyan-400 font-semibold">{log.app}</p>
+                                <p className="text-slate-400">{new Date(log.timestamp).toLocaleTimeString()}</p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Microphone Status */}
+                      <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-12 h-12 bg-gradient-to-br from-red-500/20 to-orange-500/20 rounded-xl flex items-center justify-center">
+                              <Mic className="w-6 h-6 text-red-400" />
+                            </div>
+                            <div>
+                              <p className="text-white font-semibold">Microphone</p>
+                              <p className="text-slate-400 text-xs">Audio Input</p>
+                            </div>
+                          </div>
+                          <div className={`w-3 h-3 rounded-full ${microphoneLogs.length > 0 ? 'bg-red-400 animate-pulse' : 'bg-slate-600'}`} />
+                        </div>
+                        <div className="space-y-2">
+                          {microphoneLogs.length === 0 ? (
+                            <p className="text-slate-500 text-sm">No microphone access detected</p>
+                          ) : (
+                            microphoneLogs.slice(0, 2).map((log, idx) => (
+                              <div key={idx} className="text-xs bg-slate-900/50 rounded-lg p-2">
+                                <p className="text-cyan-400 font-semibold">{log.app}</p>
+                                <p className="text-slate-400">{log.duration} - {new Date(log.timestamp).toLocaleTimeString()}</p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Location Status */}
+                      <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-12 h-12 bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-xl flex items-center justify-center">
+                              <MapPin className="w-6 h-6 text-green-400" />
+                            </div>
+                            <div>
+                              <p className="text-white font-semibold">Geolocation</p>
+                              <p className="text-slate-400 text-xs">GPS Access</p>
+                            </div>
+                          </div>
+                          <div className={`w-3 h-3 rounded-full ${geolocationLogs.length > 0 ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
+                        </div>
+                        <div className="space-y-2">
+                          {geolocationLogs.length === 0 ? (
+                            <p className="text-slate-500 text-sm">No location access detected</p>
+                          ) : (
+                            geolocationLogs.slice(0, 2).map((log, idx) => (
+                              <div key={idx} className="text-xs bg-slate-900/50 rounded-lg p-2">
+                                <p className="text-cyan-400 font-semibold">{log.site}</p>
+                                <p className="text-slate-400">Accuracy: {log.accuracy}</p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Geolocation Map */}
+                  {geolocationLogs.length > 0 && (
+                    <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
+                      <h3 className="text-xl font-bold text-white flex items-center space-x-3 mb-6">
+                        <MapPin className="w-6 h-6 text-green-400" />
+                        <span>Geolocation Access Map</span>
+                      </h3>
+                      
+                      <div className="bg-slate-900/50 border border-slate-700/50 rounded-2xl p-6 h-64 flex items-center justify-center">
+                        <div className="text-center">
+                          <Globe className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                          <p className="text-slate-400">Interactive map showing location access points</p>
+                          <p className="text-slate-500 text-sm mt-2">
+                            Chennai, Tamil Nadu ({geolocationLogs.length} access points)
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Location List */}
+                      <div className="mt-6 space-y-3">
+                        {geolocationLogs.map((log, idx) => (
+                          <div key={idx} className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                              <MapPin className="w-5 h-5 text-green-400" />
+                              <div>
+                                <p className="text-white font-semibold">{log.site}</p>
+                                <p className="text-slate-400 text-xs">
+                                  {log.latitude}, {log.longitude} • {log.accuracy} accuracy
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-xs text-slate-500">
+                              {new Date(log.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Permission History Timeline */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
+                    <h3 className="text-xl font-bold text-white flex items-center space-x-3 mb-6">
+                      <Clock className="w-6 h-6 text-cyan-400" />
+                      <span>Permission History</span>
+                    </h3>
+
+                    <div className="space-y-4">
+                      {permissionHistory.map((item, idx) => (
+                        <div key={idx} className="flex items-start space-x-4 pb-4 border-b border-slate-700/30 last:border-0">
+                          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                            {item.permission === 'camera' && <Camera className="w-5 h-5 text-purple-400" />}
+                            {item.permission === 'microphone' && <Mic className="w-5 h-5 text-red-400" />}
+                            {item.permission === 'location' && <MapPin className="w-5 h-5 text-green-400" />}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-white font-semibold">{item.app}</p>
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                item.action === 'granted' 
+                                  ? 'bg-green-500/20 text-green-400' 
+                                  : 'bg-red-500/20 text-red-400'
+                              }`}>
+                                {item.action}
+                              </span>
+                            </div>
+                            <p className="text-slate-400 text-sm capitalize">{item.permission} access {item.site ? `• ${item.site}` : ''}</p>
+                            <p className="text-slate-500 text-xs mt-1">
+                              {new Date(item.timestamp).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* NEWS FEED TAB */}
+              {activeTab === 'news' && (
+                <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 backdrop-blur-xl">
+                  <h3 className="text-2xl font-bold text-white flex items-center space-x-3 mb-6">
+                    <Globe className="w-6 h-6 text-cyan-400" />
+                    <span>Security & Privacy News</span>
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {newsData.map((news) => (
+                      <div key={news.id} className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-6 hover:border-cyan-500/30 transition-all duration-300 group">
+                        <div className="flex items-start space-x-4">
+                          <div className="w-12 h-12 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-6 h-6 text-cyan-400" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-white font-bold mb-2 group-hover:text-cyan-400 transition-colors">
+                              {news.title}
+                            </h4>
+                            <p className="text-slate-400 text-sm leading-relaxed mb-3">
+                              {news.content.substring(0, 150)}...
+                            </p>
+                            <button className="text-cyan-400 text-xs font-semibold hover:text-cyan-300 transition-colors flex items-center space-x-1">
+                              <span>Read More</span>
+                              <ExternalLink className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Input Box */}
-                <div className="flex items-center space-x-3 pt-4 border-t border-slate-700/50">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-xl flex-shrink-0">
-                    👤
+                    ))}
                   </div>
-                  <input
-                    type="text"
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                    placeholder="Share your security insights..."
-                    className="flex-1 px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-white placeholder-slate-500"
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={!messageInput.trim()}
-                    className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                  >
-                    <Send className="w-5 h-5" />
-                  </button>
                 </div>
-              </div>
+              )}
 
               {/* Privacy Policy Footer */}
               <div className="text-center p-8 bg-gradient-to-r from-slate-800/30 to-slate-900/30 border border-slate-700/50 rounded-2xl backdrop-blur-xl">
@@ -653,7 +1213,7 @@ const SecurityDashboard = () => {
 
       {/* Placeholder when no app selected */}
       {!selectedApp && vaultUnlocked && (
-        <div className="fixed right-0 top-0 h-full w-96 bg-gradient-to-br from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-2xl border-l border-slate-700/50 shadow-2xl flex items-center justify-center animate-slide-in-right">
+        <div className="fixed right-0 top-0 h-full w-96 bg-gradient-to-br from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-2xl border-l border-slate-700/50 shadow-2xl flex items-center justify-center">
           <div className="text-center p-8">
             <Info className="w-16 h-16 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-slate-400 mb-2">No App Selected</h3>

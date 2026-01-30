@@ -35,33 +35,50 @@ const LoginPage = () => {
     setMessage('');
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setMessage('');
-    try {
-      const res = await axios.post("http://localhost:3000/auth/login", {
-        usr_name: formData.usr_name,
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setIsLoading(true);
+  setMessage('');
+
+  try {
+    const res = await axios.post(
+      "http://localhost:5000/login",                     // ← fixed port + endpoint
+      {
+        username: formData.usr_name,                      // ← renamed field
         password: formData.password
-      }, {
+      },
+      {
         headers: { "Content-Type": "application/json" },
-      });
-      if (res.status === 200) {
-        localStorage.setItem('token', res.data.token);
-        setMessage('Login successful!');
-        setTimeout(() => {
-          navigate('/profileform');
-        }, 2000);
-      } else {
-        setMessage(res.data.error || 'Login failed');
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      setMessage(error.response?.data?.error || 'Failed to connect to server');
-    } finally {
-      setIsLoading(false);
+    );
+
+    // Backend returns { status: "Login successful" } on success
+    if (res.data.status === "Login successful") {
+      // Option A: If you want to keep using localStorage + token later
+      // localStorage.setItem('token', 'dummy-token-until-backend-adds-jwt');
+
+      // Option B: Just use session flag / username
+      localStorage.setItem('username', formData.usr_name);
+
+      setMessage('Login successful! Redirecting...');
+      
+      setTimeout(() => {
+        navigate('/dashboard');                        // ← more consistent with your backend routes
+        // or '/community' or '/profileform' — your choice
+      }, 1200);
+    } else {
+      setMessage(res.data.error || 'Login failed');
     }
-  };
+  } catch (error) {
+    console.error("Login error:", error);
+    setMessage(
+      error.response?.data?.error || 
+      'Cannot connect to server. Is backend running on port 5000?'
+    );
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
