@@ -1,57 +1,31 @@
-# live_domain_usage.py
-import os
-from mitmproxy import http
-from collections import defaultdict
-from urllib.parse import urlparse
-
-TARGET_DOMAINS = [
-    "google.com",
-]
-
-usage = defaultdict(lambda: {
-    "up": 0,
-    "down": 0,
-    "total": 0
-})
-
-def clear_screen():
-    os.system("cls" if os.name == "nt" else "clear")
-
-def get_size(headers, content):
-    headers_size = sum(len(k) + len(v) for k, v in headers.items())
-    body_size = len(content) if content else 0
-    return headers_size + body_size
-
-def is_target(domain):
-    return domain and any(domain.endswith(d) for d in TARGET_DOMAINS)
+usage_stats = defaultdict(lambda: {"up": 0, "down": 0, "total": 0})
 
 class LiveDomainUsage:
-    def request(self, flow: http.HTTPFlow):
+    def __init__(self, log_file="log.txt"):
+        self.log_file = log_file
+
+    def log_to_file(self, message):
+        with open(self.log_file, "a") as f:
+            f.write(message + "\n")
+
+    def request(self, flow):
         domain = urlparse(flow.request.url).hostname
-        if is_target(domain):
-            size = get_size(flow.request.headers, flow.request.content)
-            usage[domain]["up"] += size
-            usage[domain]["total"] += size
-            self.print_stats()
+        if domain and "google.com" in domain:
+            # Calculate upload size
+            size = len(str(flow.request.headers)) + len(flow.request.content or b"")
+            usage_stats[domain]["up"] += size
+            usage_stats[domain]["total"] += size
 
-    def response(self, flow: http.HTTPFlow):
+            # Log request
+            self.log_to_file(f"REQUEST to {flow.request.url}:\nHeaders: {flow.request.headers}\nBody: {flow.request.content}\n---")
+
+    def response(self, flow):
         domain = urlparse(flow.request.url).hostname
-        if is_target(domain) and flow.response:
-            size = get_size(flow.response.headers, flow.response.content)
-            usage[domain]["down"] += size
-            usage[domain]["total"] += size
-            self.print_stats()
+        if domain and "google.com" in domain:
+            # Calculate download size
+            size = len(str(flow.response.headers)) + len(flow.response.content or b"")
+            usage_stats[domain]["down"] += size
+            usage_stats[domain]["total"] += size
 
-    def print_stats(self):
-        clear_screen()
-        print("📡 LIVE DOMAIN DATA USAGE\n")
-        for domain, data in usage.items():
-            print(
-                f"{domain}\n"
-                f"  ↑ Upload   : {data['up'] / 1024:.2f} KB\n"
-                f"  ↓ Download : {data['down'] / 1024:.2f} KB\n"
-                f"  Σ Total    : {data['total'] / 1024:.2f} KB\n"
-            )
-        print("Press Ctrl+C to stop")
-
-addons = [LiveDomainUsage()]
+            # Log response
+            self.log_to_file(f"RESPONSE from {flow.request.url}:\nHeaders: {flow.response.headers}\nBody: {flow.response.content}\n===")
