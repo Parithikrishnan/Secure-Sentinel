@@ -348,6 +348,22 @@ LOG_FILE = "network_logs.txt"
 # Network usage statistics
 usage_stats = defaultdict(lambda: {"up": 0, "down": 0, "total": 0})
 
+# Live network statistics
+network_stats = {
+    "total_requests": 0,
+    "active_connections": 0,
+    "data_transferred": 0,
+    "blocked_requests": 0,
+    "requests_per_domain": defaultdict(int),
+    "last_updated": None
+}
+
+# Track active connections
+active_connections_set = set()
+
+# Blocked domains list (you can add domains to block)
+BLOCKED_DOMAINS = ['malicious-site.com', 'tracker.evil.com', 'ads.annoyingsite.com']
+
 class LiveDomainUsage:
     """
     Mitmproxy addon class for monitoring network traffic
@@ -363,16 +379,45 @@ class LiveDomainUsage:
 
     def request(self, flow):
         """Handle HTTP/HTTPS requests"""
+        global network_stats, active_connections_set
+        
         domain = urlparse(flow.request.url).hostname
         if domain:
+            # Update statistics
+            network_stats["total_requests"] += 1
+            network_stats["requests_per_domain"][domain] += 1
+            network_stats["last_updated"] = datetime.now().isoformat()
+            
+            # Track active connection
+            connection_id = f"{domain}:{flow.id}"
+            active_connections_set.add(connection_id)
+            network_stats["active_connections"] = len(active_connections_set)
+            
+            # Check if domain is blocked
+            is_blocked = any(blocked in domain for blocked in BLOCKED_DOMAINS)
+            if is_blocked:
+                network_stats["blocked_requests"] += 1
+            
             # Calculate upload size
             size = len(str(flow.request.headers)) + len(flow.request.content or b"")
             usage_stats[domain]["up"] += size
             usage_stats[domain]["total"] += size
+            network_stats["data_transferred"] += size
 
-            # Log request
+            # Log request - DOMAIN SPECIFIC FORMAT
             timestamp = datetime.now().isoformat()
-            log_message = f"[{timestamp}] REQUEST to {flow.request.url}:\nHeaders: {flow.request.headers}\nBody: {str(flow.request.content[:200])}\n---"
+            method = flow.request.method
+            path = flow.request.path[:100]  # Limit path length
+            
+            log_message = (
+                f"[{timestamp}]\n"
+                f"🌐 Domain: {domain}\n"
+                f"📤 Request: {method} {path}\n"
+                f"📊 Size: {size} bytes\n"
+                f"{'🚫 BLOCKED' if is_blocked else '✅ Allowed'}\n"
+                f"---"
+            )
+            
             self.log_to_file(log_message)
             
             # Emit real-time via WebSocket if available
@@ -380,26 +425,54 @@ class LiveDomainUsage:
                 socketio.emit('network_update', {
                     'logs': [{
                         'timestamp': timestamp,
-                        'content': log_message,
+                        'domain': domain,
+                        'method': method,
+                        'path': path,
+                        'size': size,
                         'type': 'request',
-                        'domain': domain
-                    }]
+                        'blocked': is_blocked,
+                        'content': log_message
+                    }],
+                    'stats': {
+                        'total_requests': network_stats["total_requests"],
+                        'active_connections': network_stats["active_connections"],
+                        'data_transferred': network_stats["data_transferred"],
+                        'blocked_requests': network_stats["blocked_requests"]
+                    }
                 })
             except:
                 pass
 
     def response(self, flow):
         """Handle HTTP/HTTPS responses"""
+        global network_stats, active_connections_set
+        
         domain = urlparse(flow.request.url).hostname
         if domain:
+            # Remove from active connections
+            connection_id = f"{domain}:{flow.id}"
+            active_connections_set.discard(connection_id)
+            network_stats["active_connections"] = len(active_connections_set)
+            
             # Calculate download size
             size = len(str(flow.response.headers)) + len(flow.response.content or b"")
             usage_stats[domain]["down"] += size
             usage_stats[domain]["total"] += size
+            network_stats["data_transferred"] += size
 
-            # Log response
+            # Log response - DOMAIN SPECIFIC FORMAT
             timestamp = datetime.now().isoformat()
-            log_message = f"[{timestamp}] RESPONSE from {flow.request.url}:\nHeaders: {flow.response.headers}\nStatus: {flow.response.status_code}\nBody: {str(flow.response.content[:200])}\n==="
+            status = flow.response.status_code
+            
+            log_message = (
+                f"[{timestamp}]\n"
+                f"🌐 Domain: {domain}\n"
+                f"📥 Response: {status}\n"
+                f"📊 Size: {size} bytes\n"
+                f"⏱️ Duration: {int((flow.response.timestamp_end - flow.request.timestamp_start) * 1000)}ms\n"
+                f"==="
+            )
+            
             self.log_to_file(log_message)
             
             # Emit real-time via WebSocket if available
@@ -407,11 +480,18 @@ class LiveDomainUsage:
                 socketio.emit('network_update', {
                     'logs': [{
                         'timestamp': timestamp,
-                        'content': log_message,
-                        'type': 'response',
                         'domain': domain,
-                        'status': flow.response.status_code
-                    }]
+                        'status': status,
+                        'size': size,
+                        'type': 'response',
+                        'content': log_message
+                    }],
+                    'stats': {
+                        'total_requests': network_stats["total_requests"],
+                        'active_connections': network_stats["active_connections"],
+                        'data_transferred': network_stats["data_transferred"],
+                        'blocked_requests': network_stats["blocked_requests"]
+                    }
                 })
             except:
                 pass
@@ -446,11 +526,19 @@ def get_network_logs():
 
 @app.route('/network/stats', methods=['GET'])
 def get_network_stats():
-    """Get network usage statistics by domain"""
+    """Get live network usage statistics"""
     return jsonify({
         "stats": dict(usage_stats),
         "total_domains": len(usage_stats),
-        "total_traffic": sum(stat["total"] for stat in usage_stats.values())
+        "total_traffic": sum(stat["total"] for stat in usage_stats.values()),
+        "live_stats": {
+            "total_requests": network_stats["total_requests"],
+            "active_connections": network_stats["active_connections"],
+            "data_transferred": network_stats["data_transferred"],
+            "blocked_requests": network_stats["blocked_requests"],
+            "requests_per_domain": dict(network_stats["requests_per_domain"]),
+            "last_updated": network_stats["last_updated"]
+        }
     })
 
 def network_monitoring_loop():
@@ -466,6 +554,47 @@ def network_monitoring_loop():
 # ==========================================
 
 permission_logs = []
+
+# Store live browser permissions
+browser_permissions = {
+    "geolocation": {"state": "unknown", "timestamp": None},
+    "camera": {"state": "unknown", "timestamp": None},
+    "microphone": {"state": "unknown", "timestamp": None},
+    "notifications": {"state": "unknown", "timestamp": None}
+}
+
+@app.route('/permissions/browser', methods=['POST'])
+def update_browser_permissions():
+    """Receive browser permission updates from frontend"""
+    data = request.get_json()
+    permission_name = data.get('name')
+    state = data.get('state')
+    
+    if permission_name in browser_permissions:
+        browser_permissions[permission_name] = {
+            "state": state,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Emit alert via WebSocket
+        try:
+            socketio.emit('permission_alert', {
+                'timestamp': datetime.now().isoformat(),
+                'type': permission_name,
+                'state': state,
+                'message': f'{permission_name.title()} permission {state}'
+            })
+        except:
+            pass
+        
+        return jsonify({"status": "updated", "permission": permission_name, "state": state})
+    
+    return jsonify({"error": "Invalid permission name"}), 400
+
+@app.route('/permissions/browser', methods=['GET'])
+def get_browser_permissions():
+    """Get current browser permissions state"""
+    return jsonify({"permissions": browser_permissions})
 
 @app.route('/permissions/scan', methods=['GET'])
 def scan_permissions():
